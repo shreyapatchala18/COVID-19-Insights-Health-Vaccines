@@ -1,0 +1,729 @@
+---
+title: "Examining COVID-19 Health Outcomes and Vaccine Uptake Predictors: Insights for HEW Policy and Outreach"
+format: pdf
+editor: visual
+---
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+# loading in libraries
+invisible(library(tidyverse))
+invisible(library(patchwork))
+invisible(library(car))
+invisible(library(gt))
+invisible(library(ggdag))
+invisible(library(ggplot2))
+invisible(library(dagitty))
+invisible(library(GGally))
+invisible(library(ggplot2))
+
+```
+
+```{r, echo=FALSE}
+df = read.csv("/Users/shreyapatchala/Desktop/Applied LM/Assignments/HW8/hw8/covidcast-hew-617.csv")
+```
+
+## Exploratory Data Analysis
+
+To investigate public health factors during COVID-19, I conducted a regression analysis with two main goals. First, I assessed the relationship between in-person schooling and COVID-19 health metrics to inform school attendance policies during pandemics. Second, I identified key predictors of vaccine uptake by analyzing early 2021 behavioral and attitudinal data to forecast vaccination acceptance as eligibility expanded.
+
+**Data Summary:\
+**\
+The HEW dataset, collected by Carnegie Mellon’s Delphi group via the COVID-19 Trends and Impact Survey on Facebook, provides county-level COVID-19 indicators in the U.S. for two periods in early 2021. This data captures behaviors, health outcomes, and public sentiment during a critical pandemic phase, supporting analysis of in-person schooling’s relationship to COVID-19 incidence and the predictive impact of behaviors and beliefs on vaccine uptake. Key variables include:
+
+-   **time value**: Date of observation (format: "YYYY-mm-dd"), marking the week ending on that day.
+
+<!-- -->
+
+-   **geo value**: County identifier using a five-digit FIPS code.
+
+-   **cli**: Estimated % of people with COVID-like symptoms in households.
+
+-   **tested 14d**: % of people tested for COVID-19 in the past 14 days.
+
+-   **tested positive 14d**: Estimated test positivity rate over the past 14 days.
+
+-   **confirmed 7dav incidence prop**: New confirmed COVID-19 cases per 100,000, representing incidence.
+
+-   **inperson school fulltime**: % of households with children attending school full-time in person.
+
+-   **inperson school parttime**: % of households with children attending school part-time in person.
+
+-   **covid vaccinated or accept**: % of people vaccinated or willing to be vaccinated if offered.
+
+-   **covid vaccinated**: % of people who have received a COVID-19 vaccine.
+
+-   **wearing mask 7d**: % of people who wore masks most or all the time in public in the past 7 days.
+
+-   **others masked**: % of people reporting that most or all others in public wore masks.
+
+-   **public transit 1d**: % of people who used public transit in the past 24 hours.
+
+-   **work outside home 1d**: % of people who worked or attended school outside their home in the past 24 hours.
+
+-   **shop 1d**: % of people who visited a market or pharmacy in the past day.
+
+-   **restaurant 1d**: % of people who visited a restaurant or café in the past day.
+
+-   **spent time 1d**: % of people who spent time with non-household members in the past day.
+
+-   **large event 1d**: % of people who attended a large event (10+ people) in the past day.
+
+-   **worried become ill**: % of people somewhat or very worried about severe COVID-19 illness.
+
+-   **vaccine likely friends**: % of people likely to vaccinate if friends or family recommend it.
+
+-   **vaccine likely who**: % of people likely to vaccinate if recommended by the WHO.
+
+-   **vaccine likely govt health**: % of people likely to vaccinate if advised by government health officials.
+
+-   **vaccine likely politicians**: % of people likely to vaccinate if recommended by politicians.
+
+For my analysis, I chose (confirmed 7dav incidence prop) the 7-day COVID-19 incidence rate as the response variable for assessing health outcomes related to in-person schooling. This metric—new cases per 100,000 people—provides a clear measure of disease prevalence. For predicting vaccine uptake, I selected the percentage of respondents either vaccinated or willing to be vaccinated, as it aligns with understanding factors that drive vaccine acceptance. While the dataset contains other indicators on testing, beliefs, and symptoms, I focused on essential variables to simplify and enhance model interpretability. The excluded variables and the rationale behind each decision are outlined below:
+
+```{r, echo=FALSE}
+
+# Load necessary library
+library(gt)
+
+# Define variables and their reasons for exclusion with added line breaks for spacing
+variables <- c("cli (COVID-like illness)", 
+               "tested_14d and tested_positive_14d", 
+               "various belief indicators")
+reasons <- c("While informative, this variable was excluded\ndue to incorrect calculations\nthat resulted in inaccurate values.",
+             "Testing rates and positivity rates,\nthough relevant, are indirectly\nrelated to school reopening decisions.",
+             "Belief indicators like 'vaccine likely politicians'\noffer insight into vaccine attitudes but\nare less directly tied to COVID-19\nhealth outcomes.")
+
+# Create a data frame
+excluded_variables <- data.frame(
+  Variable = variables,
+  Reason_for_Exclusion = reasons
+)
+
+# Create the table with explicit column width using gt
+excluded_table <- excluded_variables %>%
+  gt() %>%
+  cols_label(
+    Variable = "Variable",
+    Reason_for_Exclusion = "Reason for Exclusion"
+  ) %>%
+  cols_width(
+    everything() ~ px(300)  # Set a fixed width for each column
+  ) %>%
+  tab_options(
+    table.font.size = "small",
+    data_row.padding = px(9) # Add padding around rows for readability
+  )
+
+# Display the table
+excluded_table
+
+```
+
+```{r, echo=FALSE, fig.cap="Directed Acyclic Graph (DAG) of COVID-19 incidences", fig.width=4, fig.height=4}
+# 
+# # Load necessary libraries
+# library(ggdag)
+# library(dagitty)
+# library(ggplot2)
+# 
+# # Define the DAG
+# dag <- dagitty('
+# dag {
+#     covid_rate
+#     school_full
+#     school_part
+#     jan_rate
+#     transit
+#     work_outside
+#     shop
+#     restaurant
+#     spent_time
+#     large_event
+# 
+#     school_full -> covid_rate
+#     school_part -> covid_rate
+# 
+#     jan_rate -> school_full
+#     jan_rate -> school_part
+#     jan_rate -> covid_rate
+# 
+#     transit -> school_full
+#     transit -> school_part
+#     transit -> covid_rate
+# 
+#     work_outside -> school_full
+#     work_outside -> school_part
+#     work_outside -> covid_rate
+# 
+#     shop -> school_full
+#     shop -> school_part
+#     shop -> covid_rate
+# 
+#     restaurant -> school_full
+#     restaurant -> school_part
+#     restaurant -> covid_rate
+# 
+#     spent_time -> school_full
+#     spent_time -> school_part
+#     spent_time -> covid_rate
+# 
+#     large_event -> school_full
+#     large_event -> school_part
+#     large_event -> covid_rate
+# }
+# ')
+# 
+# ggdag(ggdag_dag) +
+#   theme_dag() +
+#   geom_dag_point(size = 3)  # Only draw nodes without labels
+
+```
+
+**Data Exploration\
+**\
+January 30 acts as a baseline disease load or starting point to help explain the COVID-19 incidence rate in March. This approach helps to account for pre-existing conditions when evaluating how variables like in-person schooling relate to COVID-19 outcomes. So basically, to understand the relationship between in-person schooling in March and COVID-19 outcomes in March, we are using January data as the starting point or baseline. More details have been discussed in the Methods section.
+
+In the analysis, to ensure the integrity of our analysis, I addressed missing values across key variables. Specifically, I removed records with missing values for critical predictors. This approach maintained consistency in the dataset, enabling a robust analysis without imputing potentially inaccurate values.
+
+```{r, echo=FALSE}
+#Drop NA values from part time and full time variables
+df1 <- df[!is.na(df$inperson_school_fulltime) & !is.na(df$inperson_school_parttime), ]
+```
+
+```{r, echo=FALSE}
+# Filter data for January 30 and March 2
+jan_data <- subset(df1, time_value == "2021-01-30")
+mar_data <- subset(df1, time_value == "2021-03-02")
+```
+
+```{r, echo=FALSE}
+# Rename confirmed_7dav_incidence_prop for clarity in January data
+jan_data <- jan_data[, c("geo_value", "confirmed_7dav_incidence_prop")]
+colnames(jan_data)[2] <- "jan_confirmed_7dav_incidence"
+```
+
+```{r, echo=FALSE}
+# Merge January data with March data on geo_value to keep all variables
+merged_data <- merge(mar_data, jan_data, by = "geo_value", all.x = TRUE)
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.cap="Scatter plot for relationship between COVID-19 incidence and behavioral variables", out.width="60%", fig.align='center'}
+# 
+# # Load necessary packages
+# library(GGally)
+# library(ggplot2)
+# 
+# # Select and rename variables
+# selected_vars <- merged_data[, c("inperson_school_fulltime", "inperson_school_parttime", 
+#                                  "jan_confirmed_7dav_incidence", "public_transit_1d", 
+#                                  "work_outside_home_1d", "shop_1d", "restaurant_1d", 
+#                                  "spent_time_1d", "large_event_1d", "confirmed_7dav_incidence_prop")]
+# colnames(selected_vars) <- c("Sch_Full", "Sch_Part", "Jan_Inc", 
+#                              "Transit", "Work_Out", "Shop", "Rest", 
+#                              "Spent_T", "Lg_Event", "Cov_Inc")
+# 
+# # Suppress all messages and warnings in the ggpairs function
+# suppressWarnings(suppressMessages({
+#   ggpairs(selected_vars,
+#           upper = list(continuous = wrap("cor", size = 2.5)),  # Add correlation in the upper panels
+#           lower = list(continuous = wrap("points", size = 0.1)),  # Scatter plots in lower panels
+#           diag = list(continuous = wrap("barDiag", color = "gray", binwidth = 3))) +  # Adjust binwidth for the histogram
+#     theme_minimal() +  # Set a minimal theme for a clean look
+#     theme(
+#       axis.text.x = element_text(angle = 45, hjust = 1, size = 5),  # Slant x-axis text and reduce size
+#       axis.text.y = element_text(angle = 0, hjust = 1, size = 5),   # Reduce y-axis text size
+#       strip.text = element_text(size = 6)  # Reduce size of labels inside the plot panels
+#     )
+# }))
+# 
+# 
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.cap="Distribution of predictor variables including the response variable", out.width="76%", fig.align='center'}
+
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# Include response variable and rename columns
+plot_data <- merged_data %>%
+  select(
+    inperson_school_fulltime, inperson_school_parttime,
+    jan_confirmed_7dav_incidence, public_transit_1d,
+    work_outside_home_1d, shop_1d, restaurant_1d,
+    spent_time_1d, large_event_1d, confirmed_7dav_incidence_prop  # Include response variable
+  ) %>%
+  rename(
+    School_Full = inperson_school_fulltime,
+    School_Part = inperson_school_parttime,
+    Jan_Incidence = jan_confirmed_7dav_incidence,
+    Transit = public_transit_1d,
+    Work_Outside = work_outside_home_1d,
+    Shop = shop_1d,
+    Restaurant = restaurant_1d,
+    Spent_Time = spent_time_1d,
+    Large_Event = large_event_1d,
+    Covid_Incidence = confirmed_7dav_incidence_prop  # Response variable
+  ) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Value")
+
+# Create faceted histogram with reduced overall plot size
+ggplot(plot_data, aes(x = Value, fill = Variable)) +
+  geom_histogram(bins = 30, color = "black") +  # Adjust bins as needed
+  facet_wrap(~ Variable, scales = "free") +  # Separate facet for each variable
+  labs(
+    title = "Histograms of Potential Predictors and Response Variable",
+    x = "Value",
+    y = "Frequency"
+  ) +
+  scale_fill_manual(values = scales::hue_pal()(10)) +  # Assign different colors automatically
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 8),  # Adjust facet label text size
+    axis.text.x = element_text(size = 5),  # Reduce x-axis text size
+    axis.text.y = element_text(size = 5),  # Reduce y-axis text size
+    legend.position = "none"  # Remove legend for a cleaner look
+  )
+
+```
+
+In Figure 1, the covid incidence rate variable shows a right-skewed distribution, which is indicated by a longer tail on the right side.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.cap="Q-Q Plot of Response Variable", out.width="50%", fig.width=5, fig.height=3, fig.align='center'}
+
+# Load the car package
+library(car)
+
+# Set smaller font sizes for the plot
+par(cex.lab = 0.6, cex.axis = 0.6)  # Adjust title, label, and axis text sizes
+
+# Generate a Q-Q plot with a 95% confidence envelope for the response variable
+qqPlot(merged_data$confirmed_7dav_incidence_prop, 
+       xlab = "Theoretical Quantiles",
+       ylab = "Sample Quantiles",
+       id = FALSE)
+
+
+
+```
+
+To further assess the normality of the response variable, i generated a QQ plot with an envelope (Figure 2). The QQ plot corroborated our observations from the histograms, revealing that the right tail of the data significantly deviates from the expected theoretical quantiles and the leverage points are addressed will be discussed in the Methods section.
+
+## Methods
+
+Applying a log transformation on the confirmed_7dav_incidence_prop (Covid Incidence Rate) variable and helped fix the problem of varying spread (heteroscedasticity), making the variance more consistent across different levels of the independent variables.
+
+```{r, echo=FALSE}
+# linear model with the log-transformed response variable - initial model
+lm_init <- lm(log(confirmed_7dav_incidence_prop) ~ inperson_school_fulltime + 
+            inperson_school_parttime + jan_confirmed_7dav_incidence + 
+            public_transit_1d + work_outside_home_1d + shop_1d + 
+            restaurant_1d + spent_time_1d + large_event_1d, 
+            data = merged_data)
+```
+
+```{r, echo=FALSE, fig.width=5, fig.height=3, fig.cap="Cook's Distance",out.width="50%" }
+
+# Calculate Cook's Distance
+cooksinit <- cooks.distance(lm_init)
+
+# Plot Cook's Distance
+plot(cooksinit, type = "h", ylab = "Cook's Distance", xlab = "Observation Index")
+abline(h = 4 / (nrow(merged_data) - length(coef(lm_init))), col = "red", lty = 2)
+
+```
+
+I ran the initial model, and the diagnostics indicated four influential points (observation numbers 13, 39, 114, 65). After identifying these influential observations, we removed them from the dataset and re-ran the model, subsequently performing diagnostics on the updated results.
+
+**Model - Part a** (after all required changes):
+
+$\log(\text{Covid Incidence Rate}) = \beta_0 + \beta_1 \cdot \text{Fulltime School} + \beta_2 \cdot \text{Parttime School} + \beta_3 \cdot \text{Jan Incidence Rate} + \beta_4 \cdot \text{Public Transit} + \beta_5 \cdot \text{Work Outside} + \beta_6 \cdot \text{shop} + \beta_7 \cdot \text{restaurant} + \beta_8 \cdot \text{spent Time} + \beta_9 \cdot \text{large Event} + \varepsilon$
+
+```{r, echo=FALSE}
+# influential points
+influential_points <- c(13, 39, 114, 65)
+
+# Remove the influential points 
+merged_data_filtered <- merged_data[-influential_points, ]
+
+# Refit the model without the influential points
+lm_refit <- lm(log(confirmed_7dav_incidence_prop) ~ inperson_school_fulltime + 
+               inperson_school_parttime + jan_confirmed_7dav_incidence + 
+               public_transit_1d + work_outside_home_1d + shop_1d + 
+               restaurant_1d + spent_time_1d + large_event_1d, 
+               data = merged_data_filtered)
+
+```
+
+In this part a) analysis, I used the sandwich estimator (heteroskedasticity-consistent standard errors) to address potential heteroskedasticity in the residuals of my linear regression model. Heteroskedasticity occurs when the variability of the residuals differs across levels of an independent variable, which can lead to biased standard errors if left uncorrected.
+
+Diagnostic Plot:
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.cap="Diagnostic plot of the final model", out.width="80%", fig.height=4, fig.align='center'}
+library(car)
+
+diagnostics_function <- function(model) {
+  # Standardized and studentized residuals
+  std_res <- rstandard(model)
+  stud_res <- rstudent(model)
+  fitted_values <- model$fitted.values
+  
+
+  leverage_values <- hatvalues(model)
+  cooks_distances <- cooks.distance(model)
+  
+
+  par(mfrow = c(3, 3), mar = c(4, 4, 2, 2))  
+  
+  label_size <- 0.8  
+  title_size <- 0.9  # Adjust title size
+  
+  # 1. Observed vs. Fitted Values
+  plot(fitted_values, model$model[, 1], 
+       main = "Observed vs. Fitted Values",
+       xlab = "Fitted Values", ylab = "Observed Values",
+       cex.lab = label_size, cex.main = title_size)  # Apply smaller title size
+  abline(0, 1, col = "red", lty = 2)  
+  
+  # 2. Standardized Residuals vs. Fitted Values
+  plot(fitted_values, std_res, 
+       main = "Standardized Residuals vs. Fitted",
+       xlab = "Fitted Values", ylab = "Standardized Residuals",
+       cex.lab = label_size, cex.main = title_size)
+  abline(h = 0, col = "red", lty = 2)
+  
+  # 3. √|Standardized Residuals| vs. Fitted Values
+  plot(fitted_values, sqrt(abs(std_res)), 
+       main = expression(sqrt("|Standardized Residuals|") ~ vs ~ "Fitted"), 
+       xlab = "Fitted Values", ylab = expression(sqrt("|Standardized Residuals|")),
+       cex.lab = label_size, cex.main = title_size)
+  
+  # 4. Studentized Residuals vs. Fitted Values 
+  plot(fitted_values, stud_res, 
+       main = "Studentized Residuals vs. Fitted",
+       xlab = "Fitted Values", ylab = "Studentized Residuals",
+       cex.lab = label_size, cex.main = title_size)
+  abline(h = 0, col = "red", lty = 2)  
+  abline(h = c(-2, 2), col = "red", lty = 2)  
+  
+  # 5. Q-Q Plot of Standardized Residuals with 95% CI Envelope
+  par(cex.lab = label_size)  
+  qqPlot(model, main = "Q-Q Plot", cex.main = 0.3)
+  par(cex.lab = 0.9)  
+  
+  # 6. Leverage Plot
+  plot(leverage_values, main = "Leverage Values", 
+       xlab = "Observation Index", ylab = "Leverage",
+       cex.lab = label_size, cex.main = title_size)
+  abline(h = 2 * mean(leverage_values), col = "red", lty = 2)  
+  
+  # 7. Cook's Distance Plot
+  plot(cooks_distances, type = "h", main = "Cook's Distance",
+       xlab = "Observation Index", ylab = "Cook's Distance",
+       cex.lab = label_size, cex.main = title_size)
+  abline(h = 4 / nrow(model$model), col = "red", lty = 2)  
+  
+  # 8. Residuals vs. Leverage Plot
+  plot(leverage_values, std_res, 
+       main = "Residuals vs Leverage", 
+       xlab = "Leverage", ylab = "Standardized Residuals",
+       cex.lab = label_size, cex.main = title_size)
+  abline(h = 0, col = "red", lty = 2)  
+  
+  # Reset layout to default after plotting
+  par(mfrow = c(1, 1), mar = c(5, 4, 4, 2) + 0.1)
+}
+
+diagnostics_function(lm_refit)
+
+```
+
+Overall, this model demonstrates a solid adherence to the assumptions of linear regression.
+
+**Coefficient Significance and Effect Size:**
+
+Null Hypothesis: There is no relationship between in-person schooling and Covid outcomes.\
+$H_0: \beta_1 = 0$, $\beta_2 = 0$\
+Alternate Hypothesis: There is relationship between in-person schooling and Covid outcomes.\
+$H_A: \beta_1 \neq 0$, $\beta_2 \neq 0$
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, out.width="100%", fig.height=4, fig.align='center'}
+# Load necessary library
+library(gt)
+
+# Coefficients and standard errors
+coefficients <- c(0.0067005, 0.009953)
+standard_errors <- c(0.0020634, 0.0021455)
+# Shortened predictor variable names
+predictor_variables <- c("Fulltime School", "Parttime School")
+
+# z-value for a 95% confidence interval
+z_value <- 1.96
+lower_bounds <- coefficients - z_value * standard_errors
+upper_bounds <- coefficients + z_value * standard_errors
+
+# Create a data frame
+ci_results <- data.frame(
+  Predictor = predictor_variables,
+  Estimate = coefficients,
+  Lower_Bound = lower_bounds,
+  Upper_Bound = upper_bounds
+)
+
+# Generate the table with gt
+ci_results %>%
+  gt() %>%
+  cols_label(
+    Predictor = "Predictor Variable",
+    Estimate = "Coefficient Estimate",
+    Lower_Bound = "Lower Bound (95% CI)",
+    Upper_Bound = "Upper Bound (95% CI)"
+  ) %>%
+  fmt_number(
+    columns = c(Estimate, Lower_Bound, Upper_Bound),
+    decimals = 4
+  ) %>%
+  tab_options(
+    table.font.size = "small"
+  )
+
+```
+
+For vaccine uptake prediction, I split data into training and testing sets, focusing on predicting March vaccination rates. I used best subset, lasso, and ridge methods, choosing lasso for its balance of accuracy (lowest RMSE) and simplicity, retaining essential predictors. With *covid_vaccinated_or_accept* as the response variable, this approach leverages January data to highlight behavioral and belief factors that can guide HEW’s targeted outreach in future pandemics.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# List of columns to check for NA values
+columns_to_check <- c("others_masked", "public_transit_1d",
+                      "work_outside_home_1d", "shop_1d", "restaurant_1d", "spent_time_1d",
+                      "large_event_1d", "worried_become_ill", "vaccine_likely_friends",
+                      "vaccine_likely_who", "vaccine_likely_govt_health", 
+                      "vaccine_likely_politicians", "wearing_mask")
+
+# Remove rows with NA values in any of the specified columns
+df3 <- df[complete.cases(df[, columns_to_check]), ]
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Ensure the date column is in Date format
+df3$time_value <- as.Date(df3$time_value)
+
+# Split data by date
+data <- subset(df3, time_value == "2021-01-30")  # January observations for training
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Calculate the number of rows for training
+train_indices <- sample(seq_len(nrow(data)), size = 0.6 * nrow(data))
+
+# Split the data
+train_data <- data[train_indices, ]  # 60% for training
+test_data <- data[-train_indices, ]  # Remaining 40% for testing
+
+# # Check the split
+# cat("Training set rows:", nrow(train_data), "\n")
+# cat("Test set rows:", nrow(test_data), "\n")
+
+pd_data <- subset(df3, time_value == "2021-03-02")   # March observations for testing
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Load required package
+library(glmnet)
+
+# Define predictor matrix x (ensure only numeric predictors are used)
+predictor_vars <- c("others_masked", "public_transit_1d", "work_outside_home_1d",
+                    "shop_1d", "restaurant_1d", "spent_time_1d", "large_event_1d",
+                    "worried_become_ill", "vaccine_likely_friends", "vaccine_likely_who",
+                    "vaccine_likely_govt_health", "vaccine_likely_politicians", "wearing_mask")
+
+x <- as.matrix(train_data[, predictor_vars])  # Predictor matrix for training
+y <- train_data$covid_vaccinated_or_accept      # Response variable
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.cap="Lasso Regularazitation Path", out.width="70%", fig.align='center'}
+
+# Define a grid of lambda values for Lasso
+grid <- 10^seq(10, -2, length = 100)
+
+# Fit the Lasso model
+lasso.mod <- glmnet(x, y, alpha = 1, lambda = grid)
+
+# Plot the Lasso path (coefficients vs. lambda)
+plot(lasso.mod, xvar = "lambda", label = TRUE)
+
+```
+
+Figure 5 highlights variables that remain significant as lambda decreases, helping identify stable predictors and an optimal lambda range. It guides feature selection and regularization to balance model complexity and predictive accuracy.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.cap="Cross-Validation Results for Lasso Regression", out.width="60%", fig.width=5, fig.height=3, fig.align='center'}
+
+# Set seed for reproducibility
+set.seed(1)
+
+# Perform cross-validation on the Lasso model
+cv.out <- cv.glmnet(x, y, alpha = 1)
+
+# Plot cross-validation error as a function of lambda
+plot(cv.out)
+
+```
+
+Figure 6 displays cross-validation results for the Lasso model, showing mean squared error (MSE) across a range of lambda values to identify the optimal regularization parameter.
+
+```{r, echo=FALSE}
+# Load necessary library
+library(glmnet)
+
+# Define predictor variables and response variable
+predictor_vars <- c("others_masked", "public_transit_1d", "work_outside_home_1d",
+                    "shop_1d", "restaurant_1d", "spent_time_1d", "large_event_1d",
+                    "worried_become_ill", "vaccine_likely_friends", "vaccine_likely_who",
+                    "vaccine_likely_govt_health", "vaccine_likely_politicians", "wearing_mask")
+response_var <- "covid_vaccinated_or_accept"  # Response variable
+
+# Step 1: Prepare the predictor matrix and response vector for the training data
+x_train <- as.matrix(train_data[, predictor_vars])  # Predictor matrix for training
+y_train <- train_data[[response_var]]               # Response variable
+
+# Step 2: Fit Lasso model with cross-validation to select the best lambda
+set.seed(1)
+cv.lasso <- cv.glmnet(x_train, y_train, alpha = 1)  # alpha = 1 for Lasso
+
+# Step 3: Extract the optimal lambda from cross-validation
+best_lambda <- cv.lasso$lambda.min
+
+# Step 4: Fit the final Lasso model using the best lambda
+final_lasso_model <- glmnet(x_train, y_train, alpha = 1, lambda = best_lambda)
+
+# Step 5: Prepare pd_data's predictor matrix for prediction
+x_pd <- as.matrix(pd_data[, predictor_vars])
+
+# Step 6: Predict the response variable values for pd_data using the final Lasso model
+predictions <- predict(final_lasso_model, s = best_lambda, newx = x_pd)
+
+# Step 7: Replace NA values in the response column of pd_data with the predictions
+pd_data[[response_var]][is.na(pd_data[[response_var]])] <- predictions
+
+
+
+
+
+```
+
+**Model (Part b)**
+
+$(\text{Covid Vaccinated/Accept}) = \beta_0 + \beta_1 \cdot \text{Others Masked} + \beta_2 \cdot \text{Public Transit} + \beta_3 \cdot \text{Work Outside} + \beta_4 \cdot \text{Restaurant} + \beta_5 \cdot \text{Spent Time} + \beta_6 \cdot \text{Large Event} + \beta_7 \cdot \text{Worried Ill} +  \beta_8 \cdot \text{Vaccine Friends} + \beta_9 \cdot \text{Vaccine WHO} + \beta_10 \cdot \text{Vaccine Govt} + \beta_11 \cdot \text{Vaccine Politicians} + \beta_12 \cdot \text{Wearing Mask} + \varepsilon$
+
+```{r, echo=FALSE}
+# Load necessary library
+library(glmnet)
+
+# Display the best lambda from cross-validation
+# cat("Best lambda (minimizing cross-validated error):", best_lambda, "\n")
+# 
+# # 1. Display coefficients for the final model at best lambda
+# cat("\nCoefficients of the Lasso model at best lambda:\n")
+# print(coef(final_lasso_model, s = best_lambda))
+# 
+# # 2. Cross-Validation Error Metrics
+# # Display cross-validation error metrics to assess the model’s performance
+# cat("\nCross-validation metrics:\n")
+# cat("Mean cross-validated error (MSE):", cv.lasso$cvm[cv.lasso$lambda == best_lambda], "\n")
+# cat("Standard error of cross-validated error:", cv.lasso$cvsd[cv.lasso$lambda == best_lambda], "\n")
+
+# 3. Model Performance on Training Data
+# Calculate and display the RMSE and R-squared on the training data as a measure of fit
+pred_train <- predict(final_lasso_model, s = best_lambda, newx = x_train)
+
+# Calculate RMSE for training data
+rmse_train <- sqrt(mean((y_train - pred_train)^2))
+# cat("Training RMSE:", rmse_train, "\n")
+# 
+# # Calculate R-squared for training data
+sst <- sum((y_train - mean(y_train))^2)
+sse <- sum((y_train - pred_train)^2)
+r_squared_train <- 1 - (sse / sst)
+# cat("Training R-squared:", r_squared_train, "\n")
+
+```
+
+```{r, echo=FALSE}
+# Load necessary libraries
+library(gt)
+
+# Prepare data for the table
+results <- data.frame(
+  Metric = c("Best Lambda (minimizing cross-validated error)", 
+             "Mean Cross-Validated Error (MSE)", 
+             "Standard Error of Cross-Validated Error", 
+             "Training RMSE", 
+             "Training R-Squared"),
+  Value = c(
+    best_lambda,
+    cv.lasso$cvm[cv.lasso$lambda == best_lambda],
+    cv.lasso$cvsd[cv.lasso$lambda == best_lambda],
+    rmse_train,
+    r_squared_train
+  )
+)
+
+# Generate table
+results %>%
+  gt() %>%
+  tab_header(
+    title = "Summary of Lasso Model Results"
+  ) %>%
+  cols_label(
+    Metric = "Metric",
+    Value = "Value"
+  ) %>%
+  fmt_number(
+    columns = Value,
+    decimals = 6
+  )
+
+```
+
+The optimal lambda value, $\lambda = 0.0608$, minimizes cross-validated error, balancing complexity with predictive accuracy. This Lasso model excludes less impactful predictors (zero coefficients) and retains key factors. Significant predictors—such as vaccine_likely_who, vaccine_likely_govt_health, and wearing_mask—highlight the importance of trusted health messaging and mask adherence in vaccine acceptance.
+
+## Results
+
+Regression analysis showed a significant relationship between in-person schooling and COVID-19 incidence: full-time schooling had $\beta = 0.0067$, 95% CI $[0.0027, 0.0107]$, and part-time schooling had $\beta = 0.0100$, 95% CI $[0.0057, 0.0142]$, both significant at $p < .05$. Lasso regression for vaccine uptake prediction (optimal $\lambda = 0.0608$) explained 74.6% of variance, emphasizing the role of trusted health sources and safety practices in driving vaccine acceptance.
+
+### Discussion
+
+The analyses conducted in this study provide insights into the factors influencing COVID-19 outcomes and vaccination behaviors, aiming to inform policy decisions and outreach strategies for managing public health initiatives during pandemics. For Problem A, which examined the relationship between in-person schooling and COVID-19 incidence rates, the findings indicate a statistically significant association between levels of in-person schooling and COVID-19 incidence rates. For Problem B, exploring the predictability of vaccination uptake based on behavior and beliefs, the analysis identified several behavioral and attitudinal predictors as significant predictors of vaccination willingness. Limitations include potential biases from self-reported data (survey) and limited generalizability, as findings are based on specific counties and a unique pandemic phase, possibly limiting relevance to other regions or future crises.
+
+```{r}
+# Assuming `final_lasso_model` is your fitted Lasso model, `best_lambda` is the optimal lambda,
+# and `test_data` contains your 2nd week data with the same predictors as in training.
+
+# Step 1: Define the predictor matrix for test data
+x_test <- as.matrix(test_data[, predictor_vars])  # Use the same predictor variables as in training
+
+# Step 2: Make predictions for all counties in the 2nd week
+# This will produce predicted values where data is available
+predictions <- predict(final_lasso_model, s = best_lambda, newx = x_test)
+
+# Step 3: Identify counties with missing data and replace with NA
+# Create a logical vector for missing predictions in `test_data`
+missing_data_indices <- which(is.na(rowSums(x_test)))  # Rows with any NA predictors
+
+# Step 4: Replace predictions for missing data with NA
+# Convert predictions to a vector
+pred_vector <- as.vector(predictions)
+
+# Replace values for counties with missing data
+pred_vector[missing_data_indices] <- NA
+
+# Output the vector
+pred_vector
+
+```
