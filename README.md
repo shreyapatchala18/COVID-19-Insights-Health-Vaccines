@@ -71,12 +71,7 @@ Key Variables:
 1. **Set Up Environment**:
    - Python 3.8+ with required libraries (`pandas`, `statsmodels`, `sklearn`, `matplotlib`).
 
-2. **Run Scripts**:
-   - Data cleaning and exploration: `data_cleaning.py`
-   - Regression analysis: `regression_analysis.py`
-   - Predictive modeling: `predictive_modeling.py`
-
-3. **Generate Outputs**:
+2. **Generate Outputs**:
    - Diagnostic plots and regression summaries.
    - Cross-validation results for Lasso regression.
 
